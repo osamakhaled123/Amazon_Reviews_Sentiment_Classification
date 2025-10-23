@@ -3,10 +3,10 @@ import numpy as np
 import torch
 from collections import Counter
 from tqdm import tqdm
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 from torch.nn.utils.rnn import pad_sequence
-import sklearn.feature_extraction.text
-
+from sklearn.feature_extraction.text import TfidfVectorizer
+from gensim.models import KeyedVectors
 
 
 def TF_IDF(training_data, validating_data, max_features=10000, min_df=15, k=5000):
@@ -18,16 +18,12 @@ def TF_IDF(training_data, validating_data, max_features=10000, min_df=15, k=5000
     X_train = selector.fit_transform(X_train, training_data['score'])
     X_val = selector.transform(X_val)
 
-    unique, counts = np.unique(training_data['score'].values, return_counts=True)
-    class_weights = 1 / counts
-
-    return X_train, X_val, class_weights
-
+    return X_train, X_val
 def encode_text(tokens, word_to_index):
     return [word_to_index.get(word, word_to_index["<unk>"]) for word in tokens]
 
 
-def word2vec(texts, labels, w2v_trained_model=[], word_to_index={}, emb_dim=300):
+def word2vec(texts, w2v_trained_model=[], word_to_index={}, emb_dim=300):
     tokenized_texts = [text.lower().split() for text in texts]
     if not w2v_trained_model:
         w2v_trained_model = KeyedVectors.load_word2vec_format('/path/to/GoogleNews-vectors-negative300.bin',
@@ -59,7 +55,7 @@ def word2vec(texts, labels, w2v_trained_model=[], word_to_index={}, emb_dim=300)
                                 batch_first=True,
                                 padding_value=word_to_index["<pad>"])
 
-    return padded_texts
+    return padded_texts, embedding_matrix, w2v_trained_model, word_to_index
 
 
 def print_memory(prefix=""):
