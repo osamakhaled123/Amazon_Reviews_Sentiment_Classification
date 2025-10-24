@@ -152,7 +152,7 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
 def deep_predict(model, data, target, batch_size, device = device):
     """Predict with monitoring for memory usage and progress."""
     model.eval()
-    model.to(device)
+    model = model.to(device)
     predictions = []
 
     data_size = data.shape[0]
@@ -185,6 +185,7 @@ def deep_predict(model, data, target, batch_size, device = device):
             batch_predictions = []
             for batch_data, labels in data_loop:
                 batch_data = batch_data.to(device)
+                labels = labels.to(device)
                 logits = model(batch_data)
                 _, predicted = torch.max(logits, 1)
                 if predicted.is_cuda:
@@ -194,7 +195,7 @@ def deep_predict(model, data, target, batch_size, device = device):
             predictions.extend(np.concatenate(batch_predictions))
 
             # Memory cleanup
-            del data_slice, target_slice, dataloader, batch_predictions
+            del data_loop, data_slice, target_slice, dataloader, batch_predictions
             torch.cuda.empty_cache()
             gc.collect()
             print_memory(f"After batch {batch_start//data_batch + 1}")
@@ -203,3 +204,132 @@ def deep_predict(model, data, target, batch_size, device = device):
     print_memory("Final")
     return np.array(predictions)
 
+
+class GRUClassifier(nn.Module):
+    def __init__(self, embedding_matrix, hidden_dim, output_dim):
+        super(GRUClassifier, self).__init__()
+        vocab_size, embedding_dim = embedding_matrix.shape
+        self.embedding = nn.Embedding.from_pretrained(
+            torch.tensor(embedding_matrix, dtype=torch.float32),
+            freeze=False
+        )
+        self.gru = nn.GRU(embedding_dim, hidden_dim, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.dropout = nn.Dropout(0.3)
+
+    def forward(self, x):
+        x = x.long()
+        x = self.embedding(x)
+        _, h = self.gru(x)
+        h = self.dropout(h[-1])
+        out = self.fc(h)
+        return out
+
+
+def GRU_train(model, train_data, train_target, val_data, val_target, learning_rate, num_epochs, batch_size, device):
+    # train_loader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
+    model = model.to(device)
+
+    train_size = train_data.shape[0]
+    val_size = val_data.shape[0]
+
+    train_batch = train_size // 5
+    val_batch = val_size // 5
+
+    classes = np.unique(train_target.values)
+    class_weights = compute_class_weight(classes=classes, class_weight='balanced', y=train_target.values)
+    class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
+
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    train_losses, val_losses = [], []
+
+    for epoch in range(5):
+        model.train()
+
+        for batch_start in range(0, train_size, train_batch):
+            running_loss = 0
+            batch_end = min(batch_start + train_batch, train_size)
+            trainloader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
+
+            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch + 1}", leave=False)
+            total_loss = 0.0
+
+            for X_batch, y_batch in train_loop:
+                X_batch, y_batch = X_batch.long().to(device), y_batch.long().to(device)
+                optimizer.zero_grad()
+
+                outputs = model(X_batch)
+                loss = criterion(outputs, y_batch)
+                loss.backward()
+
+                optimizer.step()
+                total_loss += loss.item()
+
+            del train_loop, trainloader
+            torch.cuda.empty_cache()
+            gc.collect()
+
+            print(
+                f"Training loss for batch {(batch_start + train_batch) // train_batch}, for epoch {epoch + 1} is:\t{running_loss / len(trainloader):.4f}\n")
+            train_losses.append(running_loss / len(trainloader.dataset))
+
+        model.eval()
+        with torch.no_grad():
+            for batch_start in range(0, val_size, val_batch):
+                batch_end = min(batch_start + val_batch, val_size)
+                valoader = redefine(val_data[batch_start:batch_end], val_target[batch_start:batch_end], batch_size)
+
+                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch + 1}", leave=False)
+                val_loss = 0.0
+
+                for X_batch, y_batch in val_loop:
+                    X_batch, y_batch = X_batch.long().to(device), y_batch.long().to(device)
+                    outputs = model(X_batch)
+                    loss = criterion(outputs, y_batch)
+                    total_loss += loss.item()
+
+                del val_loop, valoader
+                torch.cuda.empty_cache()
+                gc.collect()
+
+                print(
+                    f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch + 1} is:\t{val_loss / len(valoader):.4f}\n")
+                train_losses.append(val_loss / len(valoader.dataset))
+    return model, train_losses, val_losses
+
+
+def GRU_predict(model, X_batch, y_batch, batch_size):
+    model.eval()
+    model.to(device)
+    predictions = []
+
+    val_size = X_batch.shape[0]
+    val_batch = val_size // 5
+
+    print(f"🚀 Starting prediction on {val_size} samples.")
+    print_memory("Initial")
+
+    with torch.no_grad():
+        for batch_start in range(0, val_size, val_batch):
+            batch_end = min(batch_start + val_batch, val_size)
+            valoader = redefine(X_batch[batch_start:batch_end], y_batch[batch_start:batch_end], batch_size)
+
+            val_loop = tqdm.tqdm(valoader, desc=f"Validate batch {(batch_start+val_batch)/val_batch}", leave=False)
+
+            for X_batch, _ in val_loop:
+                X_batch = X_batch.long().to(device)
+                logits = model(X_batch)
+                preds = torch.argmax(logits, dim=1).cpu().numpy()
+                predictions.extend(preds)
+
+            del val_loop, valoader, preds, logits
+            torch.cuda.empty_cache()
+            gc.collect()
+            print_memory(f"After batch {batch_start//val_batch + 1}")
+
+    print("✅ Prediction complete.")
+    print_memory("Final")
+
+    return np.array(predictions)

@@ -10,6 +10,7 @@ import torch
 import joblib
 import tqdm
 import tokenizers
+import classification
 import os
 
 
@@ -33,7 +34,8 @@ models = {'Random Forest':RandomForestClassifier(class_weight='balanced', random
                                                    solver="saga", max_iter=1000),
           'SVC':SVC(kernel='rbf', class_weight='balanced', max_iter=1000, C=0.2, random_state=42, probability=True),
           'XGBoost':XGBClassifier(eval_metric="mlogloss", use_label_encoder=False, random_state=42),
-          'Deep': NN_Deep(drop_out = 0.2)}
+          'Deep': NN_Deep(drop_out = 0.2),
+          'GRU':GRUClassifier(emb_matrix, 10, 5)}
 
 
 for name, model in tqdm.tqdm(models.items(), desc="Training models", unit="model"):
