@@ -10,9 +10,8 @@ import torch
 import joblib
 import tqdm
 import tokenizers
-import classification
+import classification_models as cm
 import os
-
 
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
 validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
@@ -28,15 +27,14 @@ class_weights = 1 / counts
 X_train, emb_train_matrix, w2v_trained_model, word_to_index = tokenizers.word2vec(training_data['cleaned'])
 X_val, emb_val_matrix, _, _ = tokenizers.word2vec(validating_data['cleaned'], w2v_trained_model, word_to_index)
 
-models = {'Random Forest':RandomForestClassifier(class_weight='balanced', random_state=42, n_estimators=200,
-                                                 max_depth=20, n_jobs=-1, max_features='sqrt', min_samples_leaf=5),
-          'Logistic Regression':LogisticRegression(class_weight='balanced', multi_class='multinomial',
-                                                   solver="saga", max_iter=1000),
-          'SVC':SVC(kernel='rbf', class_weight='balanced', max_iter=1000, C=0.2, random_state=42, probability=True),
-          'XGBoost':XGBClassifier(eval_metric="mlogloss", use_label_encoder=False, random_state=42),
-          'Deep': NN_Deep(drop_out = 0.2),
-          'GRU':GRUClassifier(emb_matrix, 10, 5)}
-
+models = {'Random Forest': RandomForestClassifier(class_weight='balanced', random_state=42, n_estimators=200,
+                                                  max_depth=20, n_jobs=-1, max_features='sqrt', min_samples_leaf=5),
+          'Logistic Regression': LogisticRegression(class_weight='balanced', multi_class='multinomial',
+                                                    solver="saga", max_iter=1000),
+          'SVC': SVC(kernel='rbf', class_weight='balanced', max_iter=1000, C=0.2, random_state=42, probability=True),
+          'XGBoost': XGBClassifier(eval_metric="mlogloss", use_label_encoder=False, random_state=42),
+          'Deep': cm.NN_Deep(drop_out=0.2),
+          'GRU': cm.GRUClassifier(emb_matrix, 10, 5)}
 
 for name, model in tqdm.tqdm(models.items(), desc="Training models", unit="model"):
     filename = f"{name.replace(' ', '_').lower()}_model"
@@ -49,21 +47,21 @@ for name, model in tqdm.tqdm(models.items(), desc="Training models", unit="model
 
         sample_weights = training_data['score'].map(class_weight_dict).values
 
-        if not os.path.exists('models/'+filename+'.json'):
+        if not os.path.exists('models/' + filename + '.json'):
             model.fit(X_train, training_data['score'], sample_weight=sample_weights)
-            model.save_model('models/'+filename+'.json')
+            model.save_model('models/' + filename + '.json')
             y_train_pred = model.predict(X_train)
             y_val_pred = model.predict(X_val)
 
     elif name == 'Deep':
 
-        if not os.path.exists('models/'+filename+'.pt'):
+        if not os.path.exists('models/' + filename + '.pt'):
             epochs = 1
             batch_size = 32
             lr = 0.001
 
-            model, train_losses, val_losses = deep_training(
-                mode=model,
+            model, train_losses, val_losses = cm.deep_training(
+                model=model,
                 train_data=X_train,
                 train_target=training_data['score'],
                 val_data=X_val,
@@ -73,20 +71,49 @@ for name, model in tqdm.tqdm(models.items(), desc="Training models", unit="model
                 batch_size=batch_size
             )
 
-            torch.save({'model_state_dict':model.state_dict(),
-                        'train_losses':train_losses,
-                        'val_losses':val_losses,
-                        'batch_size':batch_size,
-                        'learning_rate':lr
-                        }, 'models/'+filename+'.pt')
+            torch.save({'model_state_dict': model.state_dict(),
+                        'train_losses': train_losses,
+                        'val_losses': val_losses,
+                        'batch_size': batch_size,
+                        'learning_rate': lr
+                        }, 'models/' + filename + '.pt')
 
-            y_train_pred = deep_predict(model=model, data=X_train, target=training_data['score'], batch_size=32)
-            y_val_pred = deep_predict(model=model, data=X_val, target=validating_data['score'], batch_size=32)
+            y_train_pred = cm.deep_predict(model=model, data=X_train, target=training_data['score'], batch_size=32)
+            y_val_pred = cm.deep_predict(model=model, data=X_val, target=validating_data['score'], batch_size=32)
+
+
+    elif name == 'GRU':
+        if not os.path.exists('models/' + filename + '.pt'):
+            epochs = 1
+            batch_size = 32
+            lr = 0.001
+
+            model, train_losses, val_losses = cm.GRU_train(
+                model=model,
+                train_data=X_train,
+                train_target=training_data['score'],
+                val_data=X_val,
+                val_target=validating_data['score'],
+                learning_rate=lr,
+                num_epochs=epochs,
+                batch_size=batch_size
+            )
+
+            torch.save({'model_state_dict': model.state_dict(),
+                        'train_losses': train_losses,
+                        'val_losses': val_losses,
+                        'batch_size': batch_size,
+                        'learning_rate': lr
+                        }, 'models/' + filename + '.pt')
+
+            y_train_pred = cm.GRU_predict(model=model, X_batch=X_train, y_batch=training_data['score'], batch_size=32)
+            y_val_pred = cm.GRU_predict(model=model, X_batch=X_val, y_batch=validating_data['score'], batch_size=32)
+
 
     else:
-        if not os.path.exists('models/'+filename+'.pkl'):
+        if not os.path.exists('models/' + filename + '.pkl'):
             model.fit(X_train, training_data['score'])
-            joblib.dump(model, 'models/'+filename+'.pkl', compress=('gzip', 3))
+            joblib.dump(model, 'models/' + filename + '.pkl', compress=('gzip', 3))
             y_train_pred = model.predict(X_train)
             y_val_pred = model.predict(X_val)
 
@@ -121,4 +148,5 @@ for name, model in tqdm.tqdm(models.items(), desc="Training models", unit="model
     plt.tight_layout()
     plt.show()
 
-    print("=======================================================================================================================\n")
+    print(
+        "=======================================================================================================================\n")

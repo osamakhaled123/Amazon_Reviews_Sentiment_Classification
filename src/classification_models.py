@@ -245,7 +245,7 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
 
     train_losses, val_losses = [], []
 
-    for epoch in range(5):
+    for epoch in range(num_epochs):
         model.train()
 
         for batch_start in range(0, train_size, train_batch):
