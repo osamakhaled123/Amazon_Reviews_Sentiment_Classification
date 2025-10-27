@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 import joblib
 import os
@@ -12,9 +12,9 @@ validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 
 X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
 
-name = 'Random Forest'
-model = RandomForestClassifier(class_weight='balanced', random_state=42, n_estimators=200,
-                               max_depth=20, n_jobs=-1, max_features='sqrt', min_samples_leaf=5)
+name = 'Logistic Regression'
+model = LogisticRegression(class_weight='balanced', multi_class='multinomial',
+                                                   solver="saga", max_iter=1000)
 filename = f"{name.replace(' ', '_').lower()}_model"
 
 if not os.path.exists('models/' + filename + '.pkl'):
