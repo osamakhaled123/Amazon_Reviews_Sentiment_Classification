@@ -8,7 +8,6 @@ from sklearn.utils.class_weight import compute_class_weight
 import tqdm
 import gc
 
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def print_memory(prefix=""):
