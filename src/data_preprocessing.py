@@ -5,14 +5,9 @@ print('Data source import complete.')
 
 import pandas as pd
 import numpy as np
-import re
-import cupy as cp
 import spacy
 import contractions
 import torch
-import wordcloud
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 import gc
 import glob
@@ -47,8 +42,6 @@ def split_scores(data):
     return data, df
 
 training_data, val_data = split_scores(data.copy())
-
-training_data.shape, val_data.shape
 
 def cleaning(dataset):
     """ unifying the container type
@@ -124,6 +117,7 @@ def cleaning_batches(dataset, batch_size, directory_path):
     cleaned_reviews = pd.concat([pd.read_csv(file) for file in files], ignore_index=True)
 
     return cleaned_reviews
+
 
 cleaned_training = cleaning_batches(training_data, 2**15, cleaned_data_directory)
 

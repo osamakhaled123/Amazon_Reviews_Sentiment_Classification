@@ -1,9 +1,20 @@
+import numpy as np
+import torch
+from torch import nn
+import scipy.sparse
+import psutil
+import os
+from sklearn.utils.class_weight import compute_class_weight
+import tqdm
+import gc
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 def print_memory(prefix=""):
     """Utility to print memory stats (works in Kaggle + Colab)."""
     process = psutil.Process(os.getpid())
-    cpu_mem = process.memory_info().rss / 1e9  # GB
-    gpu_mem = None
+    cpu_mem = process.memory_info().rss / 1e9
     if torch.cuda.is_available():
         gpu_mem = torch.cuda.memory_allocated() / 1e9
         print(f"{prefix} | 🧠 CPU: {cpu_mem:.2f} GB | ⚡ GPU: {gpu_mem:.2f} GB")
@@ -28,27 +39,29 @@ def redefine(data, labels, batch_size):
     assert data_.shape[0] == len(labels_), f"Data/Label length mismatch: {data_.shape[0]} vs {len(labels_)}"
 
     dataset = torch.utils.data.TensorDataset(data_, labels_)
-    return torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size)
-
+    return torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
 
 class NN_Deep(nn.Module):
     def __init__(self, drop_out):
         super(NN_Deep, self).__init__()
-        self.input_layer = nn.Linear(1000, 500)
+        self.input_layer = nn.Linear(1753, 1000)
 
-        self.h1 = nn.Linear(500, 250)
-        self.batch1 = nn.BatchNorm1d(250)
+        self.h1 = nn.Linear(1000, 500)
+        self.batch1 = nn.BatchNorm1d(500)
 
-        self.h2 = nn.Linear(250, 125)
-        self.batch2 = nn.BatchNorm1d(125)
+        self.h2 = nn.Linear(500, 250)
+        self.batch2 = nn.BatchNorm1d(250)
 
-        self.h3 = nn.Linear(125, 70)
-        self.batch3 = nn.BatchNorm1d(70)
+        self.h3 = nn.Linear(250, 125)
+        self.batch3 = nn.BatchNorm1d(125)
 
-        self.h4 = nn.Linear(70, 25)
-        self.batch4 = nn.BatchNorm1d(25)
+        self.h4 = nn.Linear(125, 70)
+        self.batch4 = nn.BatchNorm1d(70)
 
-        self.h5 = nn.Linear(25, 5)
+        self.h5 = nn.Linear(70, 25)
+        self.batch5 = nn.BatchNorm1d(25)
+
+        self.h6 = nn.Linear(25, 5)
 
         self.drop_out = nn.Dropout(p=drop_out)
         self.activation = nn.ReLU()
@@ -77,12 +90,15 @@ class NN_Deep(nn.Module):
         data = self.drop_out(data)
 
         data = self.h5(data)
+        data = self.batch5(data)
+        data = self.activation(data)
+        data = self.drop_out(data)
+
+        data = self.h6(data)
 
         return data
 
-def deep_training(model, train_data, train_target, val_data, val_target, learning_rate, num_epochs, batch_size, device=device):
-    #trainloader = redefine(train_data, train_target, batch_size)
-    #valoader = redefine(val_data, val_target, batch_size)
+def deep_training(model, train_data, train_target, val_data, val_target, learning_rate, num_epochs, batch_size, device):
     model = model.to(device)
 
     train_size = train_data.shape[0]
@@ -102,8 +118,8 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
 
     for epoch in range(num_epochs):
         running_loss = 0.0
-        model.train()
         for batch_start in range(0, train_size, train_batch):
+            model.train()
             batch_end = min(batch_start + train_batch, train_size)
             trainloader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
 
@@ -115,14 +131,14 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
                 loss = criterion(logits, labels)
                 loss.backward()
                 optimizer.step()
-                running_loss += loss.item() * data.size(0)
-
-                del data, labels
-                torch.cuda.empty_cache()
-                gc.collect()
+                running_loss += loss.item()*data.size(0)
 
             print(f"Training loss for batch {(batch_start+train_batch) // train_batch}, for epoch {epoch+1} is:\t{running_loss/len(trainloader.dataset)}\n")
             train_losses.append(running_loss/len(trainloader.dataset))
+
+            del train_loop, trainloader
+            torch.cuda.empty_cache()
+            gc.collect()
 
         model.eval()
         with torch.no_grad():
@@ -140,18 +156,20 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
                     loss = criterion(logits, labels)
                     val_loss += loss.item() * data.size(0)
 
-                    del data, labels
-                    gc.collect()
+                print(f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch+1} is:\t{val_loss/len(valoader.dataset)}\n")
+                val_losses.append(val_loss/len(valoader.dataset))
 
-            print(f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch+1} is:\t{val_loss/len(valoader.dataset)}\n")
-            val_losses.append(val_loss/len(valoader.dataset))
+                del val_loop, valoader
+                torch.cuda.empty_cache()
+                gc.collect()
 
     return model, train_losses, val_losses
 
 
-def deep_predict(model, data, target, batch_size, device = device):
+def deep_predict(model, data, target, batch_size):
     """Predict with monitoring for memory usage and progress."""
     model.eval()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = model.to(device)
     predictions = []
 
@@ -195,10 +213,10 @@ def deep_predict(model, data, target, batch_size, device = device):
             predictions.extend(np.concatenate(batch_predictions))
 
             # Memory cleanup
-            del data_loop, data_slice, target_slice, dataloader, batch_predictions
+            print_memory(f"After batch {batch_start//data_batch + 1}")
+            del data_slice, target_slice, dataloader, data_loop
             torch.cuda.empty_cache()
             gc.collect()
-            print_memory(f"After batch {batch_start//data_batch + 1}")
 
     print("✅ Prediction complete.")
     print_memory("Final")
@@ -218,7 +236,7 @@ class GRUClassifier(nn.Module):
         self.dropout = nn.Dropout(0.3)
 
     def forward(self, x):
-        x = x.long()
+        x = x.int()
         x = self.embedding(x)
         _, h = self.gru(x)
         h = self.dropout(h[-1])
@@ -227,20 +245,19 @@ class GRUClassifier(nn.Module):
 
 
 def GRU_train(model, train_data, train_target, val_data, val_target, learning_rate, num_epochs, batch_size, device):
-    # train_loader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
     model = model.to(device)
 
     train_size = train_data.shape[0]
     val_size = val_data.shape[0]
 
-    train_batch = train_size // 5
-    val_batch = val_size // 5
+    train_batch = train_size // 10
+    val_batch = val_size // 10
 
     classes = np.unique(train_target.values)
     class_weights = compute_class_weight(classes=classes, class_weight='balanced', y=train_target.values)
     class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
 
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    criterion = nn.CrossEntropyLoss(weight = class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     train_losses, val_losses = [], []
@@ -249,31 +266,29 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
         model.train()
 
         for batch_start in range(0, train_size, train_batch):
-            running_loss = 0
             batch_end = min(batch_start + train_batch, train_size)
             trainloader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
 
-            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch + 1}", leave=False)
+            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch+1}", leave=False)
             total_loss = 0.0
 
             for X_batch, y_batch in train_loop:
-                X_batch, y_batch = X_batch.long().to(device), y_batch.long().to(device)
+                X_batch, y_batch = X_batch.to(device), y_batch.int().to(device)
                 optimizer.zero_grad()
 
                 outputs = model(X_batch)
-                loss = criterion(outputs, y_batch)
+                loss = criterion(outputs, y_batch.long().to(device))
                 loss.backward()
 
                 optimizer.step()
-                total_loss += loss.item()
+                total_loss += loss.item() * X_batch.size(0)
+
+            print(f"Training loss for batch {(batch_start + train_batch) // train_batch}, for epoch {epoch+1} is:\t{total_loss/len(trainloader.dataset):.4f}\n")
+            train_losses.append(total_loss/len(trainloader.dataset))
 
             del train_loop, trainloader
             torch.cuda.empty_cache()
             gc.collect()
-
-            print(
-                f"Training loss for batch {(batch_start + train_batch) // train_batch}, for epoch {epoch + 1} is:\t{running_loss / len(trainloader):.4f}\n")
-            train_losses.append(running_loss / len(trainloader.dataset))
 
         model.eval()
         with torch.no_grad():
@@ -281,23 +296,24 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
                 batch_end = min(batch_start + val_batch, val_size)
                 valoader = redefine(val_data[batch_start:batch_end], val_target[batch_start:batch_end], batch_size)
 
-                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch + 1}", leave=False)
+                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch+1}", leave=False)
                 val_loss = 0.0
 
                 for X_batch, y_batch in val_loop:
-                    X_batch, y_batch = X_batch.long().to(device), y_batch.long().to(device)
+                    X_batch, y_batch = X_batch.to(device), y_batch.int().to(device)
                     outputs = model(X_batch)
-                    loss = criterion(outputs, y_batch)
-                    total_loss += loss.item()
+                    loss = criterion(outputs, y_batch.long().to(device))
+                    val_loss += loss.item()*X_batch.size(0)
+
+                print(f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch+1} is:\t{val_loss/len(valoader.dataset):.4f}\n")
+                val_losses.append(val_loss/len(valoader.dataset))
 
                 del val_loop, valoader
                 torch.cuda.empty_cache()
                 gc.collect()
 
-                print(
-                    f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch + 1} is:\t{val_loss / len(valoader):.4f}\n")
-                train_losses.append(val_loss / len(valoader.dataset))
     return model, train_losses, val_losses
+
 
 
 def GRU_predict(model, X_batch, y_batch, batch_size):
@@ -305,31 +321,35 @@ def GRU_predict(model, X_batch, y_batch, batch_size):
     model.to(device)
     predictions = []
 
-    val_size = X_batch.shape[0]
-    val_batch = val_size // 5
+    val_size = len(X_batch)
+    val_batch = max(1, val_size // 5)
 
-    print(f"🚀 Starting prediction on {val_size} samples.")
-    print_memory("Initial")
+    print(f"🚀 Predicting {val_size} samples (batch size {batch_size})")
 
     with torch.no_grad():
         for batch_start in range(0, val_size, val_batch):
             batch_end = min(batch_start + val_batch, val_size)
-            valoader = redefine(X_batch[batch_start:batch_end], y_batch[batch_start:batch_end], batch_size)
+            X_slice = X_batch[batch_start:batch_end]
 
+            # handle labels
+            if hasattr(y_batch, "iloc"):
+                y_slice = y_batch.iloc[batch_start:batch_end]
+            else:
+                y_slice = y_batch[batch_start:batch_end]
+
+            if len(X_slice) != len(y_slice):
+                print(f"⚠️ Skipping mismatch batch ({len(X_slice)} vs {len(y_slice)})")
+                continue
+
+            valoader = redefine(X_slice, y_slice, batch_size)
             val_loop = tqdm.tqdm(valoader, desc=f"Validate batch {(batch_start+val_batch)/val_batch}", leave=False)
-
-            for X_batch, _ in val_loop:
-                X_batch = X_batch.long().to(device)
-                logits = model(X_batch)
+            for Xb, _ in val_loop:
+                Xb = Xb.to(device)
+                logits = model(Xb)
                 preds = torch.argmax(logits, dim=1).cpu().numpy()
                 predictions.extend(preds)
 
-            del val_loop, valoader, preds, logits
             torch.cuda.empty_cache()
             gc.collect()
-            print_memory(f"After batch {batch_start//val_batch + 1}")
-
-    print("✅ Prediction complete.")
-    print_memory("Final")
 
     return np.array(predictions)
