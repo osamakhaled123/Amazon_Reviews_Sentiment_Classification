@@ -3,7 +3,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 import joblib
 import os
-import tokenizers
+from src import tokenizers
 import matplotlib.pyplot as plt
 import seaborn as sns
 
