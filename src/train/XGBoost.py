@@ -11,20 +11,18 @@ from src import tokenizers
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
 validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 
-X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
-
 name = 'XGBoost'
 model = XGBClassifier(eval_metric="mlogloss", use_label_encoder=False, random_state=42)
 filename = f"{name.replace(' ', '_').lower()}_model"
 
-classes = np.unique(training_data['score'])
-weights = compute_class_weight('balanced', classes=classes, y=training_data['score'])
-
-class_weight_dict = dict(zip(classes, weights))
-
-sample_weights = training_data['score'].map(class_weight_dict).values
-
 if not os.path.exists('models/'+filename+'.json'):
+    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
+
+    classes = np.unique(training_data['score'])
+    weights = compute_class_weight('balanced', classes=classes, y=training_data['score'])
+    class_weight_dict = dict(zip(classes, weights))
+    sample_weights = training_data['score'].map(class_weight_dict).values
+
     model.fit(X_train, training_data['score']-1, sample_weight=sample_weights)
     model.save_model('models/'+filename+'.json')
 
