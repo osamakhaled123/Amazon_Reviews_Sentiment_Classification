@@ -10,15 +10,7 @@ from src import tokenizers
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
 validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 
-X_train, emb_matrix, w2v_trained_model, word_to_index, max_len = tokenizers.word2vec(texts=training_data['cleaned'])
-X_val, _, _, _, _ = tokenizers.word2vec(texts=validating_data['cleaned'],
-                             embedding_matrix=emb_matrix,
-                             w2v_trained_model=w2v_trained_model,
-                             word_to_index=word_to_index,
-                             max_len=max_len)
-
 name = 'GRU'
-model = GRUClassifier(emb_matrix, 10, 5)
 filename = f"{name.replace(' ', '_').lower()}_model"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -28,6 +20,15 @@ if not os.path.exists('models/'+filename+'.pt'):
     epochs = 4
     batch_size = 8
     lr = 0.01
+
+    X_train, emb_matrix, w2v_trained_model, word_to_index, max_len = tokenizers.word2vec(texts=training_data['cleaned'])
+    X_val, _, _, _, _ = tokenizers.word2vec(texts=validating_data['cleaned'],
+                                            embedding_matrix=emb_matrix,
+                                            w2v_trained_model=w2v_trained_model,
+                                            word_to_index=word_to_index,
+                                            max_len=max_len)
+
+    model = GRUClassifier(emb_matrix, 10, 5)
 
     model, train_losses, val_losses = GRU_train(
         model=model,
@@ -45,13 +46,15 @@ if not os.path.exists('models/'+filename+'.pt'):
                 'train_losses':train_losses,
                 'val_losses':val_losses,
                 'batch_size':batch_size,
-                'learning_rate':lr
+                'learning_rate':lr,
+                'embedding_matrix':emb_matrix,
                 }, 'models/'+filename+'.pt')
 
 
 else:
     print("loading model...")
     checkpoint = torch.load('models/'+filename+'.pt')
+    model = GRUClassifier(checkpoint['emb_matrix'], 10, 5)
     model.load_state_dict(checkpoint['model_state_dict'])
 
 y_train_pred = GRU_predict(model=model, X_batch=X_train, y_batch=training_data['score'], batch_size=32)
