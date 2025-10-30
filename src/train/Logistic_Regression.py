@@ -10,14 +10,14 @@ import seaborn as sns
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
 validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 
-X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
-
 name = 'Logistic Regression'
-model = LogisticRegression(class_weight='balanced', multi_class='multinomial',
-                                                   solver="saga", max_iter=1000)
 filename = f"{name.replace(' ', '_').lower()}_model"
 
 if not os.path.exists('models/' + filename + '.pkl'):
+    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
+    model = LogisticRegression(class_weight='balanced', multi_class='multinomial',
+                               solver="saga", max_iter=1000)
+
     model.fit(X_train, training_data['score'])
     joblib.dump(model, 'models/' + filename + '.pkl', compress=('gzip', 3))
 
