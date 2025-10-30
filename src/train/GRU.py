@@ -14,8 +14,6 @@ name = 'GRU'
 filename = f"{name.replace(' ', '_').lower()}_model"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-print(device)
-
 if not os.path.exists('models/'+filename+'.pt'):
     epochs = 4
     batch_size = 8
