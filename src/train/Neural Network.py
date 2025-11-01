@@ -5,7 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 from src import tokenizers
-from src.classification_models import NN_Deep, deep_training, deep_predict
+from src.classification_models import NN_Deep, deep_training, deep_predict, plot_losses, smooth_curve
 
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
 validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
@@ -14,12 +14,13 @@ name = 'Deep'
 filename = f"{name.replace(' ', '_').lower()}_model"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
+
 if not os.path.exists('models/'+filename+'.pt'):
     epochs = 4
     batch_size = 64
     lr = 0.001
 
-    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
     model = NN_Deep(drop_out=0.2)
 
     model, train_losses, val_losses = deep_training(
@@ -41,11 +42,14 @@ if not os.path.exists('models/'+filename+'.pt'):
                 'learning_rate':lr
                 }, 'models/'+filename+'.pt')
 
+    plot_losses(smooth_curve(train_losses), smooth_curve(val_losses))
+
 else:
     print("loading model...")
     checkpoint = torch.load('models/'+filename+'.pt')
     model = NN_Deep(drop_out=0.2)
     model.load_state_dict(checkpoint['model_state_dict'])
+    plot_losses(smooth_curve(checkpoint['train_losses']), smooth_curve(checkpoint['val_losses']))
 
 y_train_pred = deep_predict(model=model, data=X_train, target=training_data['score'], batch_size=32)
 y_val_pred = deep_predict(model=model, data=X_val, target=validating_data['score'], batch_size=32)
@@ -81,3 +85,4 @@ axes[1].set_ylabel("Actual")
 
 plt.tight_layout()
 plt.show()
+

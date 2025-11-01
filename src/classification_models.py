@@ -9,6 +9,7 @@ import os
 from sklearn.utils.class_weight import compute_class_weight
 import tqdm
 import gc
+from matplotlib import pyplot as plt
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -436,3 +437,34 @@ def DistilBert_predict(model, val_dataloader, device):
         del batch
         gc.collect()
     return predictions, true_labels
+
+
+def plot_losses(train_losses, val_losses):
+    #epochs = range(1, len(train_losses) + 1)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(train_losses)+1), train_losses, label="Training Loss")
+    plt.plot(range(1, len(val_losses)+1), val_losses, label="Validation Loss")
+
+    # Highlight min val loss
+    min_val_idx = val_losses.index(min(val_losses))
+    plt.scatter(min_val_idx + 1, val_losses[min_val_idx], color='green', s=100, label='Best Validation Loss')
+
+    plt.title('Training vs Validation Loss', fontsize=16)
+    plt.xlabel('Epoch', fontsize=13)
+    plt.ylabel('Loss', fontsize=13)
+    plt.xticks(range(1, len(train_losses)+1))
+    plt.legend(fontsize=12)
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.tight_layout()
+    plt.show()
+
+
+def smooth_curve(points, factor=0.9):
+    smoothed = []
+    for p in points:
+        if smoothed:
+            smoothed.append(smoothed[-1] * factor + p * (1 - factor))
+        else:
+            smoothed.append(p)
+    return smoothed

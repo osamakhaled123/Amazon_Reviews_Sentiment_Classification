@@ -2,32 +2,33 @@ import pandas as pd
 import torch
 from transformers import DistilBertForSequenceClassification
 from src.tokenizers import D_BERT_pre_processing
-from src.classification_models import DistilBert_train, DistilBert_predict
+from src.classification_models import DistilBert_train, DistilBert_predict, plot_losses, smooth_curve
 from sklearn.metrics import accuracy_score, f1_score, classification_report, confusion_matrix
 import os
 from matplotlib import pyplot as plt
 import seaborn as sns
 from google.colab import drive
+
 drive.mount('/content/drive')
 
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
 validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 
-training_data.rename(columns={'score':'labels'}, inplace=True)
-validating_data.rename(columns={'score':'labels'}, inplace=True)
+training_data.rename(columns={'score': 'labels'}, inplace=True)
+validating_data.rename(columns={'score': 'labels'}, inplace=True)
 
 name = 'DistilBERT'
 filename = f"{name.replace(' ', '_').lower()}_model"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-if not os.path.exists('models/'+filename+'.pt'):
+batch_size = 64
+train_dataloader, val_dataloader = D_BERT_pre_processing(training_data, validating_data, batch_size)
+
+if not os.path.exists('models/' + filename + '.pt'):
     epochs = 1
-    batch_size = 64
     lr = 0.005
 
     num_classes = training_data["labels"].nunique()
-
-    train_dataloader, val_dataloader = D_BERT_pre_processing(training_data, validating_data, batch_size)
 
     model = DistilBertForSequenceClassification.from_pretrained(
         "/content/drive/MyDrive/distilbert_local")
@@ -41,26 +42,27 @@ if not os.path.exists('models/'+filename+'.pt'):
         learning_rate=lr,
     )
 
-    torch.save({'model_state_dict':model.state_dict(),
-                'train_losses':train_losses,
-                'val_losses':val_losses,
-                'batch_size':batch_size,
-                'learning_rate':lr,
-                'num_classes':num_classes
-                }, 'models/'+filename+'.pt')
+    torch.save({'model_state_dict': model.state_dict(),
+                'train_losses': train_losses,
+                'val_losses': val_losses,
+                'batch_size': batch_size,
+                'learning_rate': lr,
+                'num_classes': num_classes
+                }, 'models/' + filename + '.pt')
 
+    plot_losses(smooth_curve(train_losses), smooth_curve(val_losses))
 
 else:
-    checkpoint = torch.load('models/'+filename+'.pt')
+    checkpoint = torch.load('models/' + filename + '.pt')
     model = DistilBertForSequenceClassification.from_pretrained(
         "distilbert-base-uncased",
         num_labels=checkpoint['num_classes'])
     print("loading model...")
     model.load_state_dict(checkpoint['model_state_dict'])
+    plot_losses(smooth_curve(checkpoint['train_losses']), smooth_curve(checkpoint['val_losses']))
 
-y_train_pred, y_train_gt = DistilBert_predict(model=model, val_dataloader=train_dataloader, device=device),
+y_train_pred, y_train_gt = DistilBert_predict(model=model, val_dataloader=train_dataloader, device=device)
 y_val_pred, y_val_gt = DistilBert_predict(model=model, val_dataloader=val_dataloader, device=device)
-
 
 print(f"\n================== {name} ==================")
 print(f"Training Accuracy:\t{accuracy_score(y_train_gt, y_train_pred):.4f}")

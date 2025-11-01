@@ -14,8 +14,9 @@ validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 name = 'Random Forest'
 filename = f"{name.replace(' ', '_').lower()}_model"
 
+X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
+
 if not os.path.exists('models/'+filename+'.pkl'):
-    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
     model = RandomForestClassifier(class_weight='balanced', random_state=42, n_estimators=200,
                                    max_depth=20, n_jobs=-1, max_features='sqrt', min_samples_leaf=5)
 

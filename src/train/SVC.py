@@ -13,9 +13,9 @@ validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 
 name = 'SVC'
 filename = f"{name.replace(' ', '_').lower()}_model"
+X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
 
 if not os.path.exists('models/'+filename+'.pkl'):
-    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
     model = SVC(kernel='rbf', class_weight='balanced', max_iter=1000, C=0.2, random_state=42, probability=True)
     model.fit(X_train, training_data['score'])
     joblib.dump(model, 'models/'+filename+'.pkl', compress=('gzip', 3))

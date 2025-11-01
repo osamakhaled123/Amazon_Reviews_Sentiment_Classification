@@ -15,8 +15,9 @@ name = 'XGBoost'
 model = XGBClassifier(eval_metric="mlogloss", use_label_encoder=False, random_state=42)
 filename = f"{name.replace(' ', '_').lower()}_model"
 
+X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
+
 if not os.path.exists('models/'+filename+'.json'):
-    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
 
     classes = np.unique(training_data['score'])
     weights = compute_class_weight('balanced', classes=classes, y=training_data['score'])

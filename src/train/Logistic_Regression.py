@@ -13,8 +13,9 @@ validating_data = pd.read_csv('/data/cleaned_validating_reviews.csv')
 name = 'Logistic Regression'
 filename = f"{name.replace(' ', '_').lower()}_model"
 
+X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
+
 if not os.path.exists('models/' + filename + '.pkl'):
-    X_train, X_val = tokenizers.TF_IDF(training_data['cleaned'], validating_data['cleaned'], training_data['score'])
     model = LogisticRegression(class_weight='balanced', multi_class='multinomial',
                                solver="saga", max_iter=1000)
 

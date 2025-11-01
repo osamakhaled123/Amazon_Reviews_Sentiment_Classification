@@ -4,7 +4,7 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report, con
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
-from src.classification_models import GRUClassifier, GRU_train, GRU_predict
+from src.classification_models import GRUClassifier, GRU_train, GRU_predict, plot_losses, smooth_curve
 from src import tokenizers
 
 training_data = pd.read_csv('/data/cleaned_training_reviews.csv')
@@ -14,17 +14,17 @@ name = 'GRU'
 filename = f"{name.replace(' ', '_').lower()}_model"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+X_train, emb_matrix, w2v_trained_model, word_to_index, max_len = tokenizers.word2vec(texts=training_data['cleaned'])
+X_val, _, _, _, _ = tokenizers.word2vec(texts=validating_data['cleaned'],
+                                        embedding_matrix=emb_matrix,
+                                        w2v_trained_model=w2v_trained_model,
+                                        word_to_index=word_to_index,
+                                        max_len=max_len)
+
 if not os.path.exists('models/'+filename+'.pt'):
     epochs = 4
     batch_size = 8
     lr = 0.01
-
-    X_train, emb_matrix, w2v_trained_model, word_to_index, max_len = tokenizers.word2vec(texts=training_data['cleaned'])
-    X_val, _, _, _, _ = tokenizers.word2vec(texts=validating_data['cleaned'],
-                                            embedding_matrix=emb_matrix,
-                                            w2v_trained_model=w2v_trained_model,
-                                            word_to_index=word_to_index,
-                                            max_len=max_len)
 
     model = GRUClassifier(emb_matrix, 10, 5)
 
@@ -48,12 +48,14 @@ if not os.path.exists('models/'+filename+'.pt'):
                 'embedding_matrix':emb_matrix,
                 }, 'models/'+filename+'.pt')
 
+    plot_losses(smooth_curve(train_losses), smooth_curve(val_losses))
 
 else:
     print("loading model...")
     checkpoint = torch.load('models/'+filename+'.pt')
     model = GRUClassifier(checkpoint['emb_matrix'], 10, 5)
     model.load_state_dict(checkpoint['model_state_dict'])
+    plot_losses(smooth_curve(checkpoint['train_losses']), smooth_curve(checkpoint['val_losses']))
 
 y_train_pred = GRU_predict(model=model, X_batch=X_train, y_batch=training_data['score'], batch_size=32)
 y_val_pred = GRU_predict(model=model, X_batch=X_val, y_batch=validating_data['score'], batch_size=32)
@@ -89,3 +91,5 @@ axes[1].set_ylabel("Actual")
 
 plt.tight_layout()
 plt.show()
+
+
