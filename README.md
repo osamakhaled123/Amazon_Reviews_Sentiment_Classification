@@ -119,7 +119,7 @@ Each model is evaluated using:
 ---
 ## 💾 Project Structure
 
-```bash
+
 Amazon_Reviews_Sentiment_Classification/
 │
 ├── data/
@@ -133,14 +133,14 @@ Amazon_Reviews_Sentiment_Classification/
 │   ├── data_preprocessing.py
 │   ├── tokenizers.py
 │   ├── classification_models.py
-│   └── train/
+│   ├── train/│   
 │       ├── DistilBERT.py
 │       ├── GRU.py
 │       ├── Logistic_Regression.py   
 │       ├── Neural_Network.py
 │       ├── Random_Forest.py
 │       ├── SVC.py
-│       └── XGBoost.py
+│       ├── XGBoost.py
 │
 ├── README.md
 └── requirements.txt
