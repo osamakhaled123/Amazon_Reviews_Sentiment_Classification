@@ -1,8 +1,11 @@
 import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
+from torch.utils.data import DataLoader
+from datasets import Dataset
+from transformers import DistilBertTokenizerFast
 from sklearn.feature_selection import SelectKBest, chi2
 from sklearn.feature_extraction.text import TfidfVectorizer
-from torch.nn.utils.rnn import pad_sequence
 from gensim.models import KeyedVectors
 import gensim.downloader as api
 from google.colab import drive
@@ -76,3 +79,35 @@ def word2vec(texts, embedding_matrix=None, w2v_trained_model=None, word_to_index
 
     return padded_texts, embedding_matrix, w2v_trained_model, word_to_index, max_len
 
+
+
+def tokenize_function(example):
+    tokenizer = DistilBertTokenizerFast.from_pretrained("/content/drive/MyDrive/distilbert_local")
+    return tokenizer(
+        example['cleaned'],
+        truncation=True,
+        padding="max_length",
+        max_length=512
+    )
+
+
+def D_BERT_pre_processing(training_data, validating_data, batch_size):
+    training_data['cleaned'] = training_data['cleaned'].astype(str)
+    validating_data['cleaned'] = validating_data['cleaned'].astype(str)
+
+    training_data['labels'] = training_data['labels'] - 1
+    validating_data['labels'] = validating_data['labels'] - 1
+
+    train_dataset = Dataset.from_pandas(training_data)
+    val_dataset = Dataset.from_pandas(validating_data)
+
+    train_dataset = train_dataset.map(tokenize_function, batched=True)
+    val_dataset = val_dataset.map(tokenize_function, batched=True)
+
+    train_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+    val_dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
+
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size)
+
+    return train_dataloader, val_dataloader

@@ -1,6 +1,8 @@
 import numpy as np
 import torch
 from torch import nn
+from transformers import get_scheduler
+from torch.optim import AdamW
 import scipy.sparse
 import psutil
 import os
@@ -9,6 +11,7 @@ import tqdm
 import gc
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def print_memory(prefix=""):
     """Utility to print memory stats (works in Kaggle + Colab)."""
@@ -39,6 +42,7 @@ def redefine(data, labels, batch_size):
 
     dataset = torch.utils.data.TensorDataset(data_, labels_)
     return torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=True)
+
 
 class NN_Deep(nn.Module):
     def __init__(self, drop_out):
@@ -97,6 +101,7 @@ class NN_Deep(nn.Module):
 
         return data
 
+
 def deep_training(model, train_data, train_target, val_data, val_target, learning_rate, num_epochs, batch_size, device):
     model = model.to(device)
 
@@ -110,7 +115,7 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
     class_weights = compute_class_weight(classes=classes, class_weight='balanced', y=train_target.values)
     class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
 
-    criterion = nn.CrossEntropyLoss(weight = class_weights)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     train_losses, val_losses = [], []
@@ -122,7 +127,7 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
             batch_end = min(batch_start + train_batch, train_size)
             trainloader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
 
-            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch+1}", leave=False)
+            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch + 1}", leave=False)
             for data, labels in train_loop:
                 optimizer.zero_grad()
                 data, labels = data.to(device), labels.to(device)
@@ -130,10 +135,11 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
                 loss = criterion(logits, labels)
                 loss.backward()
                 optimizer.step()
-                running_loss += loss.item()*data.size(0)
+                running_loss += loss.item() * data.size(0)
 
-            print(f"Training loss for batch {(batch_start+train_batch) // train_batch}, for epoch {epoch+1} is:\t{running_loss/len(trainloader.dataset)}\n")
-            train_losses.append(running_loss/len(trainloader.dataset))
+            print(
+                f"Training loss for batch {(batch_start + train_batch) // train_batch}, for epoch {epoch + 1} is:\t{running_loss / len(trainloader.dataset)}\n")
+            train_losses.append(running_loss / len(trainloader.dataset))
 
             del train_loop, trainloader
             torch.cuda.empty_cache()
@@ -146,7 +152,7 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
                 batch_end = min(batch_start + val_batch, val_size)
                 valoader = redefine(val_data[batch_start:batch_end], val_target[batch_start:batch_end], batch_size)
 
-                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch+1}", leave=False)
+                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch + 1}", leave=False)
                 val_loss = 0.0
 
                 for data, labels in val_loop:
@@ -155,8 +161,9 @@ def deep_training(model, train_data, train_target, val_data, val_target, learnin
                     loss = criterion(logits, labels)
                     val_loss += loss.item() * data.size(0)
 
-                print(f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch+1} is:\t{val_loss/len(valoader.dataset)}\n")
-                val_losses.append(val_loss/len(valoader.dataset))
+                print(
+                    f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch + 1} is:\t{val_loss / len(valoader.dataset)}\n")
+                val_losses.append(val_loss / len(valoader.dataset))
 
                 del val_loop, valoader
                 torch.cuda.empty_cache()
@@ -188,7 +195,8 @@ def deep_predict(model, data, target, batch_size):
             elif torch.is_tensor(data):
                 data_slice = data[batch_start:batch_end].clone().detach()
             else:
-                data_slice = np.array(data.iloc[batch_start:batch_end] if hasattr(data, "iloc") else data[batch_start:batch_end])
+                data_slice = np.array(
+                    data.iloc[batch_start:batch_end] if hasattr(data, "iloc") else data[batch_start:batch_end])
 
             # Slice labels
             if hasattr(target, "iloc"):
@@ -197,7 +205,7 @@ def deep_predict(model, data, target, batch_size):
                 target_slice = target[batch_start:batch_end]
 
             dataloader = redefine(data_slice, target_slice, batch_size)
-            data_loop = tqdm.tqdm(dataloader, leave=False, desc=f"Batch {batch_start//data_batch + 1}")
+            data_loop = tqdm.tqdm(dataloader, leave=False, desc=f"Batch {batch_start // data_batch + 1}")
 
             batch_predictions = []
             for batch_data, labels in data_loop:
@@ -212,7 +220,7 @@ def deep_predict(model, data, target, batch_size):
             predictions.extend(np.concatenate(batch_predictions))
 
             # Memory cleanup
-            print_memory(f"After batch {batch_start//data_batch + 1}")
+            print_memory(f"After batch {batch_start // data_batch + 1}")
             del data_slice, target_slice, dataloader, data_loop
             torch.cuda.empty_cache()
             gc.collect()
@@ -256,7 +264,7 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
     class_weights = compute_class_weight(classes=classes, class_weight='balanced', y=train_target.values)
     class_weights = torch.tensor(class_weights, dtype=torch.float32).to(device)
 
-    criterion = nn.CrossEntropyLoss(weight = class_weights)
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     train_losses, val_losses = [], []
@@ -268,7 +276,7 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
             batch_end = min(batch_start + train_batch, train_size)
             trainloader = redefine(train_data[batch_start:batch_end], train_target[batch_start:batch_end], batch_size)
 
-            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch+1}", leave=False)
+            train_loop = tqdm.tqdm(trainloader, desc=f"Train Epoch {epoch + 1}", leave=False)
             total_loss = 0.0
 
             for X_batch, y_batch in train_loop:
@@ -282,8 +290,9 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
                 optimizer.step()
                 total_loss += loss.item() * X_batch.size(0)
 
-            print(f"Training loss for batch {(batch_start + train_batch) // train_batch}, for epoch {epoch+1} is:\t{total_loss/len(trainloader.dataset):.4f}\n")
-            train_losses.append(total_loss/len(trainloader.dataset))
+            print(
+                f"Training loss for batch {(batch_start + train_batch) // train_batch}, for epoch {epoch + 1} is:\t{total_loss / len(trainloader.dataset):.4f}\n")
+            train_losses.append(total_loss / len(trainloader.dataset))
 
             del train_loop, trainloader
             torch.cuda.empty_cache()
@@ -295,24 +304,24 @@ def GRU_train(model, train_data, train_target, val_data, val_target, learning_ra
                 batch_end = min(batch_start + val_batch, val_size)
                 valoader = redefine(val_data[batch_start:batch_end], val_target[batch_start:batch_end], batch_size)
 
-                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch+1}", leave=False)
+                val_loop = tqdm.tqdm(valoader, desc=f"Validate Epoch {epoch + 1}", leave=False)
                 val_loss = 0.0
 
                 for X_batch, y_batch in val_loop:
                     X_batch, y_batch = X_batch.to(device), y_batch.int().to(device)
                     outputs = model(X_batch)
                     loss = criterion(outputs, y_batch.long().to(device))
-                    val_loss += loss.item()*X_batch.size(0)
+                    val_loss += loss.item() * X_batch.size(0)
 
-                print(f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch+1} is:\t{val_loss/len(valoader.dataset):.4f}\n")
-                val_losses.append(val_loss/len(valoader.dataset))
+                print(
+                    f"Validating loss for batch {(batch_start + val_batch) // val_batch}, for epoch {epoch + 1} is:\t{val_loss / len(valoader.dataset):.4f}\n")
+                val_losses.append(val_loss / len(valoader.dataset))
 
                 del val_loop, valoader
                 torch.cuda.empty_cache()
                 gc.collect()
 
     return model, train_losses, val_losses
-
 
 
 def GRU_predict(model, X_batch, y_batch, batch_size):
@@ -341,7 +350,7 @@ def GRU_predict(model, X_batch, y_batch, batch_size):
                 continue
 
             valoader = redefine(X_slice, y_slice, batch_size)
-            val_loop = tqdm.tqdm(valoader, desc=f"Validate batch {(batch_start+val_batch)/val_batch}", leave=False)
+            val_loop = tqdm.tqdm(valoader, desc=f"Validate batch {(batch_start + val_batch) / val_batch}", leave=False)
             for Xb, _ in val_loop:
                 Xb = Xb.to(device)
                 logits = model(Xb)
@@ -352,3 +361,78 @@ def GRU_predict(model, X_batch, y_batch, batch_size):
             gc.collect()
 
     return np.array(predictions)
+
+
+def DistilBert_train(model, train_dataloader, val_dataloader, device, num_epochs=4, learning_rate=5e-5):
+    train_losses, val_losses = [], []
+
+    model.to(device)
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
+
+    num_training_steps = num_epochs * len(train_dataloader)
+
+    lr_scheduler = get_scheduler(
+        "linear",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=num_training_steps
+    )
+
+    progress_bar = tqdm(range(num_training_steps))
+
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        for batch in train_dataloader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+            outputs = model(**batch)
+            optimizer.zero_grad()
+            loss = outputs.loss
+            loss.backward()
+
+            running_loss += loss.item()
+
+            optimizer.step()
+            lr_scheduler.step()
+            progress_bar.update(1)
+
+        del batch
+        gc.collect()
+
+        print(f"Epoch {epoch + 1} | Loss: {running_loss / len(train_dataloader.dataset):.4f}")
+        train_losses.append(running_loss / len(train_dataloader.dataset))
+
+        model.eval()
+        with torch.no_grad():
+            val_loss = 0.0
+            for batch in val_dataloader:
+                batch = {k: v.to(device) for k, v in batch.items()}
+                output = model(**batch)
+                loss = output.loss
+                val_loss += loss.item()
+
+            del batch
+            gc.collect()
+
+            print(f"Epoch {epoch + 1} | Loss: {val_loss / len(val_dataloader.dataset):.4f}")
+            val_losses.append(val_loss / len(val_dataloader.dataset))
+
+    return model, train_losses, val_losses
+
+
+def DistilBert_predict(model, val_dataloader, device):
+    model.eval()
+    predictions, true_labels = [], []
+
+    with torch.no_grad():
+        for batch in val_dataloader:
+            batch = {k: v.to(device) for k, v in batch.items()}
+            outputs = model(**batch)
+            logits = outputs.logits
+            preds = torch.argmax(logits, dim=-1)
+            predictions.extend(preds.cpu().numpy())
+            true_labels.extend(batch["score"].cpu().numpy())
+
+        del batch
+        gc.collect()
+    return predictions, true_labels
