@@ -1,5 +1,5 @@
 # 🧠 Sentiment Analysis on Amazon Product Reviews
-> *Multi-Class Text Classification (1–5 Star Ratings) using Traditional ML, Deep Learning, and Transformers with different Tokenizers and Embedding Approaches.*
+*Multi-Class Text Classification (1–5 Star Ratings) using Traditional ML, Deep Learning, and Transformers with different Tokenizers and Embedding Approaches.*
 
 ---
 
