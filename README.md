@@ -162,5 +162,3 @@ This project demonstrates the full pipeline of modern NLP classification, combin
 - Deep learning architectures
 - Transformer-based contextual models
 It highlights the evolution from feature-based to contextual embeddings, handling class imbalance, and robust model evaluation.
-
----
