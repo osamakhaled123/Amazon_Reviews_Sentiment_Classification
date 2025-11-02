@@ -86,7 +86,7 @@ Each model is evaluated using:
 | XGBoost | TF-IDF | 19.63% | 18.01% |
 | Deep NN | TF-IDF | 12.47% | 13.35% |
 | GRU | Word2Vec | 20.0% | 18.05% |
-| DistilBERT | AutoTokenizer | 22.78% | 21.99% |
+| DistilBERT | AutoTokenizer | 25.78% | 25.01% |
 
 ---
 
