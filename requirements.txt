@@ -16,3 +16,6 @@ gc
 glob
 matplotlib
 seaborn
+fastapi
+uvicorn
+pydantic
