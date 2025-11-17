@@ -31,7 +31,7 @@ if not os.path.exists('models/' + filename + '.pt'):
     num_classes = training_data["labels"].nunique()
 
     model = DistilBertForSequenceClassification.from_pretrained(
-        "/content/drive/MyDrive/distilbert_local")
+        "drive/MyDrive/distilbert_local")
 
     model, train_losses, val_losses = DistilBert_train(
         model=model,
