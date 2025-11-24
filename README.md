@@ -155,6 +155,30 @@ Amazon_Reviews_Sentiment_Classification/
 - Deep NN models benefited from Dropout and Batch Normalization, reducing overfitting.
 
 ---
+## 🤗 Deployment 
+I’ve deployed best performed sentiment analysis model which is DistilBERT using FastAPI on Hugging Face Spaces.
+
+Base URL:
+https://osamakhaledml9-testfastapi.hf.space
+
+Prediction endpoint (POST):
+https://osamakhaledml9-testfastapi.hf.space/predict
+
+```bash
+Request format:
+{
+  "text": "Your review text here"
+}
+
+Response Format
+{
+  "input_text": "Your review text",
+  "predicted_label": The Predicted label in range 1-5,
+  "confidence": the probability chance value of the predicted_label
+}
+```
+
+---
 ## 🏁 Conclusion
 
 This project demonstrates the full pipeline of modern NLP classification, combining:
